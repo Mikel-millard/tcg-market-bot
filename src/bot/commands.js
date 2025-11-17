@@ -1,4 +1,3 @@
-// src/bot/commands.js
 import "dotenv/config";
 import { REST, Routes, SlashCommandBuilder } from "discord.js";
 
@@ -6,12 +5,69 @@ const { DISCORD_TOKEN, DISCORD_CLIENT_ID, DISCORD_GUILD_ID } = process.env;
 
 const commands = [
     new SlashCommandBuilder()
-        .setName("market-watch")
-        .setDescription("Show the weekly market watch for Riftbound TCG prices.")
-        .addIntegerOption(opt =>
+        .setName("market-watch-weekly")
+        .setDescription("Show 7-day Riftbound price movers.")
+        .addIntegerOption((opt) =>
             opt
                 .setName("top")
-                .setDescription("Number to show (5 or 10)")
+                .setDescription("Number to show (default 10, max 25)")
+                .setRequired(false)
+        )
+        .addStringOption((opt) =>
+            opt
+                .setName("rarity")
+                .setDescription("Filter by rarity (e.g. Common, Rare, Epic, Legendary, Showcase)")
+                .setRequired(false)
+        )
+        .toJSON(),
+
+    new SlashCommandBuilder()
+        .setName("market-watch-daily")
+        .setDescription("Show 24-hour Riftbound price movers.")
+        .addIntegerOption((opt) =>
+            opt
+                .setName("top")
+                .setDescription("Number to show (default 10, max 25)")
+                .setRequired(false)
+        )
+        .addStringOption((opt) =>
+            opt
+                .setName("rarity")
+                .setDescription("Filter by rarity (e.g. Common, Rare, Epic, Legendary, Showcase)")
+                .setRequired(false)
+        )
+        .toJSON(),
+
+    new SlashCommandBuilder()
+        .setName("market-watch-highest")
+        .setDescription("Show the highest priced Riftbound cards.")
+        .addIntegerOption((opt) =>
+            opt
+                .setName("top")
+                .setDescription("Number to show (default 10, max 25)")
+                .setRequired(false)
+        )
+        .addStringOption((opt) =>
+            opt
+                .setName("rarity")
+                .setDescription("Filter by rarity (e.g. Common, Rare, Epic, Legendary, Showcase)")
+                .setRequired(false)
+        )
+        .toJSON(),
+
+    new SlashCommandBuilder()
+        .setName("card-price")
+        .setDescription("Look up current price and recent changes for a card.")
+        .addStringOption((opt) =>
+            opt
+                .setName("name")
+                .setDescription("Card name (or part of it)")
+                .setRequired(true)
+        )
+        .addIntegerOption((opt) =>
+            opt
+                .setName("limit")
+                .setDescription("Max matches to show (default 5, max 10)")
                 .setRequired(false)
         )
         .toJSON()

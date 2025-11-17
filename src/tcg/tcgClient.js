@@ -1,4 +1,3 @@
-// src/tcg/tcgClient.js
 import axios from "axios";
 import "dotenv/config";
 
@@ -7,19 +6,41 @@ const BASE_URL = "https://api.justtcg.com/v1";
 
 const RIFTBOUND_GAME_ID = "riftbound-league-of-legends-trading-card-game";
 
+// Dev-mode snapshot limiting: how many batches to fetch max.
+// Default is a huge number so prod/full runs are unaffected.
+const SNAPSHOT_MAX_BATCHES = Number.parseInt(
+    process.env.SNAPSHOT_MAX_BATCHES || "999",
+    10
+);
+
+if (!JUSTTCG_API_KEY) {
+    console.warn("⚠ JUSTTCG_API_KEY is not set in .env");
+}
+
 function sleep(ms) {
     return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+/**
+ * Fetch all (or some) Riftbound NM singles using offset pagination.
+ * - limit = 20 (free plan)
+ * - offset = 0, 20, 40, ...
+ * - stops when API says there are no more results OR SNAPSHOT_MAX_BATCHES reached
+ */
 export async function fetchRiftboundCards() {
     const allCards = [];
     const limit = 20;
     let offset = 0;
     let batch = 1;
 
-    const MAX_BATCHES = 500; // safety limit
-
     while (true) {
+        if (batch > SNAPSHOT_MAX_BATCHES) {
+            console.warn(
+                `⚠ SNAPSHOT_MAX_BATCHES (${SNAPSHOT_MAX_BATCHES}) reached — stopping early (dev mode).`
+            );
+            break;
+        }
+
         console.log(`\n=== Fetching batch ${batch} (offset=${offset}) ===`);
 
         const resp = await axios.get(`${BASE_URL}/cards`, {
@@ -28,45 +49,44 @@ export async function fetchRiftboundCards() {
                 game: RIFTBOUND_GAME_ID,
                 limit,
                 offset,
+                condition: "Near Mint", // or "NM" depending on what you've verified
+                // If the API supports a sealed flag, keep this; otherwise remove it:
+                sealed: false,
                 include: "variants"
-                // add condition + sealed filters here if supported
             }
         });
 
-        const cards = resp.data.data || [];
-        const count = cards.length;
+        const data = resp.data?.data || [];
+        const meta = resp.data?.meta || {};
+        const count = data.length;
 
         if (count > 0) {
-            console.log("Sample items:");
-            cards.slice(0, 3).forEach(c => {
+            console.log("Sample cards:");
+            data.slice(0, 3).forEach((c) => {
                 console.log(`  - ${c.name} (id: ${c.id})`);
             });
         }
 
-        allCards.push(...cards);
+        allCards.push(...data);
         console.log(`  -> got ${count} items`);
         console.log(`  -> total so far: ${allCards.length}`);
 
-        // Normal exit condition:
-        if (count < limit) {
-            console.log("Reached final batch (fewer than limit).");
+        const hasMore = meta.hasMore === true;
+
+        if (!hasMore || count === 0) {
+            console.log("Reached final batch (no more results).");
             break;
         }
 
-        // Increase offset
         offset += limit;
         batch++;
 
-        // Safety
-        if (batch > MAX_BATCHES) {
-            console.warn("⚠ MAX_BATCHES reached — stopping early.");
-            break;
-        }
-
-        // Respect 10 requests/min
+        // Respect 10 req/min on free tier
         await sleep(6500);
     }
 
-    console.log(`\nDone. Total Riftbound items fetched: ${allCards.length}`);
+    console.log(
+        `\nDone. Total Riftbound NM singles fetched in this run: ${allCards.length}`
+    );
     return allCards;
 }

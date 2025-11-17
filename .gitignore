@@ -140,3 +140,6 @@ vite.config.ts.timestamp-*
 
 # ide related stuff
 .idea
+
+# db stuff
+riftbound.db
