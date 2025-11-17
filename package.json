@@ -1,0 +1,23 @@
+{
+  "name": "tcg-market-bot",
+  "version": "1.0.0",
+  "description": "Discord bot that tracks TCG weekly price movers via TCGPlayer, initial support for Riftbound",
+  "main": "src/bot/bot.js",
+  "type": "module",
+  "scripts": {
+    "bot": "node src/bot/bot.js",
+    "snapshot": "node src/scripts/snapshot.js",
+    "deploy-commands": "node src/bot/commands.js"
+  },
+  "dependencies": {
+    "axios": "^1.7.0",
+    "better-sqlite3": "^9.0.0",
+    "discord.js": "^14.16.0",
+    "dotenv": "^16.4.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Mikel-millard/tcg-market-bot"
+  },
+  "private": true
+}
