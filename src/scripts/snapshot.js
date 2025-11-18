@@ -1,6 +1,6 @@
 import "dotenv/config";
 import db from "../data/database.js";
-import { fetchRiftboundCards } from "../data/tcgClient.js";
+import { fetchRiftboundCards } from "../tcg/tcgClient.js";
 
 /**
  * Normalize the array of cards returned by fetchRiftboundCards()
