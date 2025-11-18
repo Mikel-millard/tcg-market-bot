@@ -1,5 +1,5 @@
 import "dotenv/config";
-import db from "./database.js";
+import db from "../data/database.js";
 
 // JustTCG API config
 const JUSTTCG_API_KEY = process.env.JUSTTCG_API_KEY;
