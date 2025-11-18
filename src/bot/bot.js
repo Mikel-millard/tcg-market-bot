@@ -8,16 +8,59 @@ import {
     searchCardPrices,
     formatCardSearchForDiscord
 } from "../data/movers.js";
-
-console.log("[env] DISCORD_TOKEN present:", !!process.env.DISCORD_TOKEN);
-console.log("[env] DISCORD_TOKEN length:", process.env.DISCORD_TOKEN?.length ?? 0);
+import cron from "node-cron";
+import { exec } from "node:child_process";
 
 const client = new Client({
     intents: [GatewayIntentBits.Guilds]
 });
 
+// Simple flag so we don't run overlapping snapshots
+let snapshotRunning = false;
+
+/**
+ * Run the snapshot script as a child process.
+ * This will call: node src/data/snapshot.js
+ */
+function runSnapshotViaExec() {
+    if (snapshotRunning) {
+        console.log("[snapshot] Already running; skipping new trigger.");
+        return;
+    }
+
+    snapshotRunning = true;
+    console.log("[snapshot] Starting snapshot job (npm run snapshot)...");
+
+    exec("npm run snapshot", (error, stdout, stderr) => {
+        if (stdout) {
+            console.log("[snapshot stdout]");
+            console.log(stdout);
+        }
+        if (stderr) {
+            console.error("[snapshot stderr]");
+            console.error(stderr);
+        }
+
+        if (error) {
+            console.error("[snapshot error]", error);
+        } else {
+            console.log("[snapshot] Completed successfully.");
+        }
+
+        snapshotRunning = false;
+    });
+}
+
 client.once("ready", () => {
     console.log(`🤖 Logged in as ${client.user.tag}`);
+
+    // 🕒 Daily cron: 11:00 UTC ≈ 3:00 AM Pacific
+    // Format: second? (node-cron uses 5 fields by default: m h dom mon dow)
+    // "0 11 * * *" => minute=0, hour=11, every day
+    cron.schedule("0 11 * * *", () => {
+        console.log("[cron] Triggering daily snapshot at 11:00 UTC.");
+        runSnapshotViaExec();
+    });
 });
 
 client.on("interactionCreate", async (interaction) => {
