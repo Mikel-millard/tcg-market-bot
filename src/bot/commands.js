@@ -10,7 +10,7 @@ const commands = [
         .addIntegerOption((opt) =>
             opt
                 .setName("top")
-                .setDescription("Number to show (default 10, max 25)")
+                .setDescription("Number to show (default 5, max 10)")
                 .setRequired(false)
         )
         .addStringOption((opt) =>
@@ -44,7 +44,7 @@ const commands = [
         .addIntegerOption((opt) =>
             opt
                 .setName("top")
-                .setDescription("Number to show (default 10, max 25)")
+                .setDescription("Number to show (default 5, max 10)")
                 .setRequired(false)
         )
         .addStringOption((opt) =>

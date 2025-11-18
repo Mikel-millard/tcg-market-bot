@@ -15,13 +15,9 @@ const client = new Client({
     intents: [GatewayIntentBits.Guilds]
 });
 
-// Simple flag so we don't run overlapping snapshots
+// Avoid overlapping snapshots
 let snapshotRunning = false;
 
-/**
- * Run the snapshot script as a child process.
- * This will call: node src/data/snapshot.js
- */
 function runSnapshotViaExec() {
     if (snapshotRunning) {
         console.log("[snapshot] Already running; skipping new trigger.");
@@ -54,9 +50,7 @@ function runSnapshotViaExec() {
 client.once("ready", () => {
     console.log(`🤖 Logged in as ${client.user.tag}`);
 
-    // 🕒 Daily cron: 11:00 UTC ≈ 3:00 AM Pacific
-    // Format: second? (node-cron uses 5 fields by default: m h dom mon dow)
-    // "0 11 * * *" => minute=0, hour=11, every day
+    // Daily cron: 11:00 UTC ≈ 3:00 AM PT
     cron.schedule("0 11 * * *", () => {
         console.log("[cron] Triggering daily snapshot at 11:00 UTC.");
         runSnapshotViaExec();
@@ -77,10 +71,10 @@ client.on("interactionCreate", async (interaction) => {
         return;
     }
 
-    await interaction.deferReply();
-
     // 🔎 /card-price: search a card by name and show price + changes
     if (commandName === "card-price") {
+        await interaction.deferReply();
+
         const nameQuery = interaction.options.getString("name", true);
         let limit = interaction.options.getInteger("limit") ?? 5;
         if (limit < 1) limit = 1;
@@ -100,14 +94,16 @@ client.on("interactionCreate", async (interaction) => {
         return;
     }
 
-    // For the other commands, we use a numeric "top" argument
-    let top = interaction.options.getInteger("top") ?? 10;
+    // For the market-watch commands, `top` = number per tier
+    let top = interaction.options.getInteger("top") ?? 5;
     if (top < 1) top = 1;
-    if (top > 25) top = 25;
+    if (top > 10) top = 10;
 
     const rarity = interaction.options.getString("rarity") || null;
 
-    // 💰 /market-watch-highest: highest priced cards
+    await interaction.deferReply();
+
+    // 💰 /market-watch-highest: highest priced cards (not tiered)
     if (commandName === "market-watch-highest") {
         const result = getHighestPriced(top, rarity);
         const { header, text } = formatHighestForDiscord(result);
@@ -126,15 +122,15 @@ client.on("interactionCreate", async (interaction) => {
         return;
     }
 
-    // 📈 /market-watch-weekly and /market-watch-daily (separate embeds)
+    // 📈 /market-watch-weekly and /market-watch-daily (tiered)
     const window = commandName === "market-watch-daily" ? "24h" : "7d";
     const movers = getMovers(top, window, rarity);
     const { header, incText, decText } = formatMoversForDiscord(movers);
 
     const baseTitle =
         window === "24h"
-            ? `Riftbound Market Watch — 24h Movers (Top ${top})`
-            : `Riftbound Market Watch — 7d Movers (Top ${top})`;
+            ? `Riftbound Market Watch — 24h Movers (Top ${top} per tier)`
+            : `Riftbound Market Watch — 7d Movers (Top ${top} per tier)`;
 
     const titleSuffix = rarity ? ` — ${rarity}` : "";
     const fullBaseTitle = `${baseTitle}${titleSuffix}`;
