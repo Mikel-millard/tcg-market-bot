@@ -9,6 +9,9 @@ import {
     formatCardSearchForDiscord
 } from "../data/movers.js";
 
+console.log("[env] DISCORD_TOKEN present:", !!process.env.DISCORD_TOKEN);
+console.log("[env] DISCORD_TOKEN length:", process.env.DISCORD_TOKEN?.length ?? 0);
+
 const client = new Client({
     intents: [GatewayIntentBits.Guilds]
 });
