@@ -94,7 +94,7 @@ client.on("interactionCreate", async (interaction) => {
         return;
     }
 
-    // For the market-watch commands, `top` = number per tier
+    // For market-watch commands, `top` = number per tier
     let top = interaction.options.getInteger("top") ?? 5;
     if (top < 1) top = 1;
     if (top > 10) top = 10;
@@ -103,7 +103,7 @@ client.on("interactionCreate", async (interaction) => {
 
     await interaction.deferReply();
 
-    // 💰 /market-watch-highest: highest priced cards (not tiered)
+    // 💰 /market-watch-highest: highest priced cards (not tiered by price)
     if (commandName === "market-watch-highest") {
         const result = getHighestPriced(top, rarity);
         const { header, text } = formatHighestForDiscord(result);
@@ -122,34 +122,113 @@ client.on("interactionCreate", async (interaction) => {
         return;
     }
 
-    // 📈 /market-watch-weekly and /market-watch-daily (tiered)
+    // 📈 /market-watch-weekly and /market-watch-daily (tiered embeds)
     const window = commandName === "market-watch-daily" ? "24h" : "7d";
     const movers = getMovers(top, window, rarity);
-    const { header, incText, decText } = formatMoversForDiscord(movers);
+    const {
+        header,
+        incHigh,
+        incMid,
+        incLow,
+        decHigh,
+        decMid,
+        decLow
+    } = formatMoversForDiscord(movers);
 
     const baseTitle =
         window === "24h"
-            ? `Riftbound Market Watch — 24h Movers (Top ${top} per tier)`
-            : `Riftbound Market Watch — 7d Movers (Top ${top} per tier)`;
+            ? `Riftbound Market Watch — 24h Changes (Top ${top} per tier)`
+            : `Riftbound Market Watch — 7d Changes (Top ${top} per tier)`;
 
     const titleSuffix = rarity ? ` — ${rarity}` : "";
     const fullBaseTitle = `${baseTitle}${titleSuffix}`;
 
-    const embedInc = new EmbedBuilder()
-        .setTitle(`${fullBaseTitle} — Increases`)
-        .setDescription(header)
-        .addFields({ name: "📈 Biggest Increases", value: incText })
-        .setColor(0x2ecc71) // green
-        .setTimestamp();
+    const embeds = [];
 
-    const embedDec = new EmbedBuilder()
-        .setTitle(`${fullBaseTitle} — Decreases`)
-        .setDescription(header)
-        .addFields({ name: "📉 Biggest Decreases", value: decText })
-        .setColor(0xe74c3c) // red
-        .setTimestamp();
+    // Helper to decide if a tier actually has data
+    const hasContent = (str) =>
+        str && str.trim() && str.trim().toLowerCase() !== "none" && str !== "N/A";
 
-    await interaction.editReply({ embeds: [embedInc, embedDec] });
+    // Increases embeds
+    if (hasContent(incHigh)) {
+        embeds.push(
+            new EmbedBuilder()
+                .setTitle(`${fullBaseTitle} — High-Value Increases (≥ $20)`)
+                .setDescription(header)
+                .addFields({ name: "Results", value: incHigh })
+                .setColor(0x2ecc71) // green
+                .setTimestamp()
+        );
+    }
+
+    if (hasContent(incMid)) {
+        embeds.push(
+            new EmbedBuilder()
+                .setTitle(`${fullBaseTitle} — Mid-Value Increases ($5–$20)`)
+                .setDescription(header)
+                .addFields({ name: "Results", value: incMid })
+                .setColor(0x2ecc71)
+                .setTimestamp()
+        );
+    }
+
+    if (hasContent(incLow)) {
+        embeds.push(
+            new EmbedBuilder()
+                .setTitle(`${fullBaseTitle} — Low-Value Increases (< $5)`)
+                .setDescription(header)
+                .addFields({ name: "Results", value: incLow })
+                .setColor(0x2ecc71)
+                .setTimestamp()
+        );
+    }
+
+    // Decreases embeds
+    if (hasContent(decHigh)) {
+        embeds.push(
+            new EmbedBuilder()
+                .setTitle(`${fullBaseTitle} — High-Value Decreases (≥ $20)`)
+                .setDescription(header)
+                .addFields({ name: "Results", value: decHigh })
+                .setColor(0xe74c3c) // red
+                .setTimestamp()
+        );
+    }
+
+    if (hasContent(decMid)) {
+        embeds.push(
+            new EmbedBuilder()
+                .setTitle(`${fullBaseTitle} — Mid-Value Decreases ($5–$20)`)
+                .setDescription(header)
+                .addFields({ name: "Results", value: decMid })
+                .setColor(0xe74c3c)
+                .setTimestamp()
+        );
+    }
+
+    if (hasContent(decLow)) {
+        embeds.push(
+            new EmbedBuilder()
+                .setTitle(`${fullBaseTitle} — Low-Value Decreases (< $5)`)
+                .setDescription(header)
+                .addFields({ name: "Results", value: decLow })
+                .setColor(0xe74c3c)
+                .setTimestamp()
+        );
+    }
+
+    // Fallback if absolutely nothing had data
+    if (embeds.length === 0) {
+        embeds.push(
+            new EmbedBuilder()
+                .setTitle(fullBaseTitle)
+                .setDescription(`${header}\n\nNo changes found for any tier.`)
+                .setColor(0x95a5a6) // grey
+                .setTimestamp()
+        );
+    }
+
+    await interaction.editReply({ embeds });
 });
 
 client.login(process.env.DISCORD_TOKEN);

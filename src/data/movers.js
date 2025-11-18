@@ -1,8 +1,8 @@
 import db from "./database.js";
 
 /**
- * Fetch movers for a given window ("24h" or "7d") and optional rarity filter.
- * Now returns movers split into price tiers:
+ * Fetch changes for a given window ("24h" or "7d") and optional rarity filter.
+ * Returns changes split into price tiers:
  *  - high: price >= 20
  *  - mid:  5 <= price < 20
  *  - low:  price < 5
@@ -12,9 +12,9 @@ export function getMovers(limit = 5, window = "7d", rarityFilter = null) {
     const latestRow = db
         .prepare(
             `SELECT DISTINCT snapshot_date
-             FROM price_snapshots
-             ORDER BY snapshot_date DESC
-             LIMIT 1`
+       FROM price_snapshots
+       ORDER BY snapshot_date DESC
+       LIMIT 1`
         )
         .get();
 
@@ -35,29 +35,29 @@ export function getMovers(limit = 5, window = "7d", rarityFilter = null) {
     const rarityClause = rarityFilter ? " AND LOWER(c.rarity) = LOWER(?)" : "";
     const paramsBase = rarityFilter ? [date, rarityFilter, limit] : [date, limit];
 
-    // Helper to run a tiered movers query
+    // Helper to run a tiered changes query
     const queryTier = (priceWhere, direction) => {
         return db
             .prepare(
                 `
-                SELECT
-                    ps.product_id AS productId,
-                    c.name AS name,
-                    c.set_name AS setName,
-                    c.rarity AS rarity,
-                    ps.market_price AS price,
-                    ps.${column} AS change,
-                    ps.printing AS printing
-                FROM price_snapshots ps
-                         JOIN cards c ON c.product_id = ps.product_id
-                WHERE ps.snapshot_date = ?
-                  AND ps.${column} IS NOT NULL
-                  AND ps.market_price IS NOT NULL
-                  ${priceWhere}
-                  ${rarityClause}
-                ORDER BY ps.${column} ${direction}
-                LIMIT ?
-            `
+        SELECT
+          ps.product_id AS productId,
+          c.name AS name,
+          c.set_name AS setName,
+          c.rarity AS rarity,
+          ps.market_price AS price,
+          ps.${column} AS change,
+          ps.printing AS printing
+        FROM price_snapshots ps
+          JOIN cards c ON c.product_id = ps.product_id
+        WHERE ps.snapshot_date = ?
+          AND ps.${column} IS NOT NULL
+          AND ps.market_price IS NOT NULL
+          ${priceWhere}
+          ${rarityClause}
+        ORDER BY ps.${column} ${direction}
+        LIMIT ?
+      `
             )
             .all(...paramsBase);
     };
@@ -90,17 +90,36 @@ export function getMovers(limit = 5, window = "7d", rarityFilter = null) {
 }
 
 /**
- * Format movers into strings for embed fields, now with 3 tiers:
- *  - High-Value (>= $20)
+ * Clamp a string to safely fit into a Discord embed field.
+ */
+function clampField(str) {
+    if (!str || !str.trim()) return "None";
+    const MAX = 1000; // slightly under Discord's 1024 hard limit
+    if (str.length <= MAX) return str;
+    return str.slice(0, MAX - 20) + "\n…(truncated)";
+}
+
+/**
+ * Format changes into strings per tier for embeds:
+ *  - High-Value (≥ $20)
  *  - Mid-Value ($5–$20)
  *  - Low-Value (< $5)
+ *
+ * Returns:
+ *   header,
+ *   incHigh, incMid, incLow,
+ *   decHigh, decMid, decLow
  */
 export function formatMoversForDiscord(m) {
     if (!m.date) {
         return {
             header: "No snapshot data available. Run a snapshot first.",
-            incText: "N/A",
-            decText: "N/A"
+            incHigh: "N/A",
+            incMid: "N/A",
+            incLow: "N/A",
+            decHigh: "N/A",
+            decMid: "N/A",
+            decLow: "N/A"
         };
     }
 
@@ -126,42 +145,41 @@ export function formatMoversForDiscord(m) {
         );
     };
 
-    const formatTier = (title, rows) => {
-        if (!rows || rows.length === 0) {
-            return `**${title}**\nNone`;
-        }
-        return `**${title}**\n` + rows.map(formatRow).join("\n\n");
+    const formatTierRows = (rows) => {
+        if (!rows || rows.length === 0) return "None";
+        const joined = rows.map(formatRow).join("\n\n");
+        return clampField(joined);
     };
 
-    const incSections = [
-        formatTier("High-Value (≥ $20)", m.high.increases),
-        formatTier("Mid-Value ($5–$20)", m.mid.increases),
-        formatTier("Low-Value (< $5)", m.low.increases)
-    ];
+    const incHigh = formatTierRows(m.high.increases);
+    const incMid = formatTierRows(m.mid.increases);
+    const incLow = formatTierRows(m.low.increases);
 
-    const decSections = [
-        formatTier("High-Value (≥ $20)", m.high.decreases),
-        formatTier("Mid-Value ($5–$20)", m.mid.decreases),
-        formatTier("Low-Value (< $5)", m.low.decreases)
-    ];
+    const decHigh = formatTierRows(m.high.decreases);
+    const decMid = formatTierRows(m.mid.decreases);
+    const decLow = formatTierRows(m.low.decreases);
 
-    const incText = incSections.join("\n\n");
-    const decText = decSections.join("\n\n");
-
-    return { header, incText, decText };
+    return {
+        header,
+        incHigh,
+        incMid,
+        incLow,
+        decHigh,
+        decMid,
+        decLow
+    };
 }
 
 /**
  * Get highest priced cards from latest snapshot.
- * (unchanged)
  */
 export function getHighestPriced(limit = 10, rarityFilter = null) {
     const latestRow = db
         .prepare(
             `SELECT DISTINCT snapshot_date
-             FROM price_snapshots
-             ORDER BY snapshot_date DESC
-                 LIMIT 1`
+       FROM price_snapshots
+       ORDER BY snapshot_date DESC
+       LIMIT 1`
         )
         .get();
 
@@ -176,20 +194,20 @@ export function getHighestPriced(limit = 10, rarityFilter = null) {
     const rows = db
         .prepare(
             `
-                SELECT
-                    ps.product_id AS productId,
-                    c.name AS name,
-                    c.set_name AS setName,
-                    c.rarity AS rarity,
-                    ps.market_price AS price,
-                    ps.printing AS printing
-                FROM price_snapshots ps
-                         JOIN cards c ON c.product_id = ps.product_id
-                WHERE ps.snapshot_date = ?
-                    ${rarityClause}
-                ORDER BY ps.market_price DESC
-                    LIMIT ?
-            `
+        SELECT
+          ps.product_id AS productId,
+          c.name AS name,
+          c.set_name AS setName,
+          c.rarity AS rarity,
+          ps.market_price AS price,
+          ps.printing AS printing
+        FROM price_snapshots ps
+          JOIN cards c ON c.product_id = ps.product_id
+        WHERE ps.snapshot_date = ?
+          ${rarityClause}
+        ORDER BY ps.market_price DESC
+        LIMIT ?
+      `
         )
         .all(...params);
 
@@ -198,7 +216,6 @@ export function getHighestPriced(limit = 10, rarityFilter = null) {
 
 /**
  * Format highest-price list for embeds.
- * (unchanged except for using your newline style)
  */
 export function formatHighestForDiscord(result) {
     const { rows, date, rarity } = result;
@@ -213,7 +230,7 @@ export function formatHighestForDiscord(result) {
     const rarityText = rarity ? ` — Rarity: **${rarity}**` : "";
     const header = `Highest priced cards as of **${date}**${rarityText}`;
 
-    const text =
+    const joined =
         rows.length > 0
             ? rows
                 .map((c, idx) => {
@@ -231,20 +248,19 @@ export function formatHighestForDiscord(result) {
                 .join("\n\n")
             : "None";
 
-    return { header, text };
+    return { header, text: clampField(joined) };
 }
 
 /**
  * Card price search using latest snapshot.
- * (unchanged)
  */
 export function searchCardPrices(nameQuery, limit = 5) {
     const latestRow = db
         .prepare(
             `SELECT DISTINCT snapshot_date
-             FROM price_snapshots
-             ORDER BY snapshot_date DESC
-                 LIMIT 1`
+       FROM price_snapshots
+       ORDER BY snapshot_date DESC
+       LIMIT 1`
         )
         .get();
 
@@ -258,22 +274,22 @@ export function searchCardPrices(nameQuery, limit = 5) {
     const rows = db
         .prepare(
             `
-                SELECT
-                    ps.product_id AS productId,
-                    c.name AS name,
-                    c.set_name AS setName,
-                    c.rarity AS rarity,
-                    ps.market_price AS price,
-                    ps.price_change_24h AS change24h,
-                    ps.price_change_7d AS change7d,
-                    ps.printing AS printing
-                FROM price_snapshots ps
-                         JOIN cards c ON c.product_id = ps.product_id
-                WHERE ps.snapshot_date = ?
-                  AND LOWER(c.name) LIKE LOWER(?)
-                ORDER BY c.name ASC
-                    LIMIT ?
-            `
+        SELECT
+          ps.product_id AS productId,
+          c.name AS name,
+          c.set_name AS setName,
+          c.rarity AS rarity,
+          ps.market_price AS price,
+          ps.price_change_24h AS change24h,
+          ps.price_change_7d AS change7d,
+          ps.printing AS printing
+        FROM price_snapshots ps
+          JOIN cards c ON c.product_id = ps.product_id
+        WHERE ps.snapshot_date = ?
+          AND LOWER(c.name) LIKE LOWER(?)
+        ORDER BY c.name ASC
+        LIMIT ?
+      `
         )
         .all(date, likeQuery, limit);
 
@@ -282,7 +298,6 @@ export function searchCardPrices(nameQuery, limit = 5) {
 
 /**
  * Format card search results for embeds.
- * (unchanged except for arrows)
  */
 export function formatCardSearchForDiscord(result) {
     const { rows, date, query } = result;
@@ -303,7 +318,7 @@ export function formatCardSearchForDiscord(result) {
 
     const header = `Results for "**${query}**" as of **${date}**`;
 
-    const text = rows
+    const joined = rows
         .map((c, idx) => {
             const name = c.name ?? `Product #${c.productId}`;
             const set = c.setName ?? "Unknown Set";
@@ -328,5 +343,5 @@ export function formatCardSearchForDiscord(result) {
         })
         .join("\n\n");
 
-    return { header, text };
+    return { header, text: clampField(joined) };
 }
